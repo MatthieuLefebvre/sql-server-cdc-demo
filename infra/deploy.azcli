@@ -1,0 +1,30 @@
+# Equivalent Azure CLI workflow. Run from the repository root in Bash or Azure Cloud Shell.
+export AZURE_SUBSCRIPTION_ID="<subscription-id>"
+export AZURE_RESOURCE_GROUP="<resource-group>"
+export AZURE_LOCATION="<fabric-capacity-region>"
+export AZURE_STACK_NAME="fabric-rti-phase1"
+
+az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+az group show --name "$AZURE_RESOURCE_GROUP" --output none
+
+for provider in Microsoft.Compute Microsoft.Network Microsoft.KeyVault Microsoft.SqlVirtualMachine Microsoft.DevTestLab Microsoft.MessagingConnectors; do
+  az provider register --namespace "$provider" --wait
+done
+
+export VM_ADMIN_PASSWORD="$(openssl rand -base64 48 | tr -d '\r\n')Aa1!"
+
+az bicep build --file infra/main.bicep --stdout >/dev/null
+az stack group create \
+  --name "$AZURE_STACK_NAME" \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --template-file infra/main.bicep \
+  --parameters infra/main.bicepparam location="$AZURE_LOCATION" \
+  --action-on-unmanage deleteAll \
+  --deny-settings-mode none \
+  --yes
+
+unset VM_ADMIN_PASSWORD
+
+# Teardown equivalent:
+# az stack group delete --name "$AZURE_STACK_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --action-on-unmanage deleteAll --yes
+# Purge the soft-deleted demo vault afterward when immediate redeployment is required.

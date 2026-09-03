@@ -1,0 +1,241 @@
+.create-merge table bronze_cdc_raw (
+    schema:dynamic,
+    payload:dynamic,
+    tenant_id:string,
+    source_instance:string,
+    EventProcessedUtcTime:datetime,
+    PartitionId:long,
+    EventEnqueuedUtcTime:datetime
+)
+
+.alter-merge table bronze_cdc_raw policy retention softdelete = 7d
+
+.create-merge table silver_projects (
+    tenant_id:string,
+    source_instance:string,
+    operation:string,
+    is_deleted:bool,
+    event_utc:datetime,
+    processed_utc:datetime,
+    change_lsn:string,
+    ProjectId:int,
+    ProjectCode:string,
+    ProjectName:string,
+    RegionCode:string,
+    ProjectStatus:string,
+    Budget:decimal,
+    LastModifiedUtc:datetime
+)
+
+.create-merge table silver_equipment (
+    tenant_id:string,
+    source_instance:string,
+    operation:string,
+    is_deleted:bool,
+    event_utc:datetime,
+    processed_utc:datetime,
+    change_lsn:string,
+    EquipmentId:int,
+    AssetTag:string,
+    EquipmentName:string,
+    MeterHours:real,
+    EquipmentStatus:string,
+    LastModifiedUtc:datetime
+)
+
+.create-merge table silver_work_orders (
+    tenant_id:string,
+    source_instance:string,
+    operation:string,
+    is_deleted:bool,
+    event_utc:datetime,
+    processed_utc:datetime,
+    change_lsn:string,
+    WorkOrderId:int,
+    ProjectId:int,
+    EquipmentId:int,
+    Summary:string,
+    WorkOrderStatus:string,
+    ScheduledDate:datetime,
+    LastModifiedUtc:datetime,
+    PriorityCode:string
+)
+
+.create-merge table silver_job_costs (
+    tenant_id:string,
+    source_instance:string,
+    operation:string,
+    is_deleted:bool,
+    event_utc:datetime,
+    processed_utc:datetime,
+    change_lsn:string,
+    JobCostId:long,
+    ProjectId:int,
+    CostType:string,
+    Amount:decimal,
+    CostDescription:string,
+    PostedUtc:datetime
+)
+
+.create-merge table silver_invoices (
+    tenant_id:string,
+    source_instance:string,
+    operation:string,
+    is_deleted:bool,
+    event_utc:datetime,
+    processed_utc:datetime,
+    change_lsn:string,
+    InvoiceId:long,
+    ProjectId:int,
+    InvoiceNumber:string,
+    InvoiceAmount:decimal,
+    InvoiceStatus:string,
+    IssuedDate:datetime,
+    LastModifiedUtc:datetime
+)
+
+.create-merge table silver_heartbeat (
+    tenant_id:string,
+    source_instance:string,
+    operation:string,
+    is_deleted:bool,
+    event_utc:datetime,
+    processed_utc:datetime,
+    change_lsn:string,
+    HeartbeatId:int,
+    SequenceNumber:long,
+    BusinessMarker:string,
+    EmittedUtc:datetime
+)
+
+.create-merge table schema_drift_quarantine (
+    tenant_id:string,
+    source_instance:string,
+    source_table:string,
+    operation:string,
+    event_utc:datetime,
+    processed_utc:datetime,
+    reason:string,
+    unexpected_fields:dynamic,
+    payload:dynamic
+)
+
+// Each silver policy follows the same three-stage pipeline:
+// 1. Keep events for one source table.
+// 2. Select the current row image (before for deletes, after otherwise).
+// 3. Convert the dynamic CDC payload into the typed silver schema.
+
+.alter table silver_projects policy update ```
+[
+    {
+        "IsEnabled": true,
+        "Source": "bronze_cdc_raw",
+        "Query": "bronze_cdc_raw\n| where tostring(payload.source.table) == \"Projects\"\n| extend record = iif(isnull(payload.after), payload.before, payload.after)\n| project\n    tenant_id,\n    source_instance,\n    operation = tostring(payload.op),\n    is_deleted = tobool(payload.op == \"d\"),\n    event_utc = unixtime_milliseconds_todatetime(tolong(payload.ts_ms)),\n    processed_utc = EventProcessedUtcTime,\n    change_lsn = tostring(payload.source.change_lsn),\n    ProjectId = toint(record.ProjectId),\n    ProjectCode = tostring(record.ProjectCode),\n    ProjectName = tostring(record.ProjectName),\n    RegionCode = tostring(record.RegionCode),\n    ProjectStatus = tostring(record.ProjectStatus),\n    Budget = todecimal(record.Budget),\n    LastModifiedUtc = unixtime_milliseconds_todatetime(tolong(record.LastModifiedUtc))",
+        "IsTransactional": false,
+        "PropagateIngestionProperties": true
+    }
+]```
+
+.alter table silver_equipment policy update ```
+[
+    {
+        "IsEnabled": true,
+        "Source": "bronze_cdc_raw",
+        "Query": "bronze_cdc_raw\n| where tostring(payload.source.table) == \"Equipment\"\n| extend record = iif(isnull(payload.after), payload.before, payload.after)\n| project\n    tenant_id,\n    source_instance,\n    operation = tostring(payload.op),\n    is_deleted = tobool(payload.op == \"d\"),\n    event_utc = unixtime_milliseconds_todatetime(tolong(payload.ts_ms)),\n    processed_utc = EventProcessedUtcTime,\n    change_lsn = tostring(payload.source.change_lsn),\n    EquipmentId = toint(record.EquipmentId),\n    AssetTag = tostring(record.AssetTag),\n    EquipmentName = tostring(record.EquipmentName),\n    MeterHours = todouble(record.MeterHours),\n    EquipmentStatus = tostring(record.EquipmentStatus),\n    LastModifiedUtc = unixtime_milliseconds_todatetime(tolong(record.LastModifiedUtc))",
+        "IsTransactional": false,
+        "PropagateIngestionProperties": true
+    }
+]```
+
+.alter table silver_work_orders policy update ```
+[
+    {
+        "IsEnabled": true,
+        "Source": "bronze_cdc_raw",
+        "Query": "bronze_cdc_raw\n| where tostring(payload.source.table) == \"WorkOrders\"\n| extend record = iif(isnull(payload.after), payload.before, payload.after)\n| project\n    tenant_id,\n    source_instance,\n    operation = tostring(payload.op),\n    is_deleted = tobool(payload.op == \"d\"),\n    event_utc = unixtime_milliseconds_todatetime(tolong(payload.ts_ms)),\n    processed_utc = EventProcessedUtcTime,\n    change_lsn = tostring(payload.source.change_lsn),\n    WorkOrderId = toint(record.WorkOrderId),\n    ProjectId = toint(record.ProjectId),\n    EquipmentId = toint(record.EquipmentId),\n    Summary = tostring(record.Summary),\n    WorkOrderStatus = tostring(record.WorkOrderStatus),\n    ScheduledDate = datetime(1970-01-01) + tolong(record.ScheduledDate) * 1d,\n    LastModifiedUtc = unixtime_milliseconds_todatetime(tolong(record.LastModifiedUtc)),\n    PriorityCode = tostring(record.PriorityCode)",
+        "IsTransactional": false,
+        "PropagateIngestionProperties": true
+    }
+]```
+
+.alter table silver_job_costs policy update ```
+[
+    {
+        "IsEnabled": true,
+        "Source": "bronze_cdc_raw",
+        "Query": "bronze_cdc_raw\n| where tostring(payload.source.table) == \"JobCosts\"\n| extend record = iif(isnull(payload.after), payload.before, payload.after)\n| project\n    tenant_id,\n    source_instance,\n    operation = tostring(payload.op),\n    is_deleted = tobool(payload.op == \"d\"),\n    event_utc = unixtime_milliseconds_todatetime(tolong(payload.ts_ms)),\n    processed_utc = EventProcessedUtcTime,\n    change_lsn = tostring(payload.source.change_lsn),\n    JobCostId = tolong(record.JobCostId),\n    ProjectId = toint(record.ProjectId),\n    CostType = tostring(record.CostType),\n    Amount = todecimal(record.Amount),\n    CostDescription = tostring(record.CostDescription),\n    PostedUtc = unixtime_milliseconds_todatetime(tolong(record.PostedUtc))",
+        "IsTransactional": false,
+        "PropagateIngestionProperties": true
+    }
+]```
+
+.alter table silver_invoices policy update ```
+[
+    {
+        "IsEnabled": true,
+        "Source": "bronze_cdc_raw",
+        "Query": "bronze_cdc_raw\n| where tostring(payload.source.table) == \"Invoices\"\n| extend record = iif(isnull(payload.after), payload.before, payload.after)\n| project\n    tenant_id,\n    source_instance,\n    operation = tostring(payload.op),\n    is_deleted = tobool(payload.op == \"d\"),\n    event_utc = unixtime_milliseconds_todatetime(tolong(payload.ts_ms)),\n    processed_utc = EventProcessedUtcTime,\n    change_lsn = tostring(payload.source.change_lsn),\n    InvoiceId = tolong(record.InvoiceId),\n    ProjectId = toint(record.ProjectId),\n    InvoiceNumber = tostring(record.InvoiceNumber),\n    InvoiceAmount = todecimal(record.InvoiceAmount),\n    InvoiceStatus = tostring(record.InvoiceStatus),\n    IssuedDate = datetime(1970-01-01) + tolong(record.IssuedDate) * 1d,\n    LastModifiedUtc = unixtime_milliseconds_todatetime(tolong(record.LastModifiedUtc))",
+        "IsTransactional": false,
+        "PropagateIngestionProperties": true
+    }
+]```
+
+.alter table silver_heartbeat policy update ```
+[
+    {
+        "IsEnabled": true,
+        "Source": "bronze_cdc_raw",
+        "Query": "bronze_cdc_raw\n| where tostring(payload.source.table) == \"DemoHeartbeat\"\n| extend record = iif(isnull(payload.after), payload.before, payload.after)\n| project\n    tenant_id,\n    source_instance,\n    operation = tostring(payload.op),\n    is_deleted = tobool(payload.op == \"d\"),\n    event_utc = unixtime_milliseconds_todatetime(tolong(payload.ts_ms)),\n    processed_utc = EventProcessedUtcTime,\n    change_lsn = tostring(payload.source.change_lsn),\n    HeartbeatId = toint(record.HeartbeatId),\n    SequenceNumber = tolong(record.SequenceNumber),\n    BusinessMarker = tostring(record.BusinessMarker),\n    EmittedUtc = unixtime_milliseconds_todatetime(tolong(record.EmittedUtc))",
+        "IsTransactional": false,
+        "PropagateIngestionProperties": true
+    }
+]```
+
+// Quarantine anything that cannot safely enter a typed silver contract:
+// missing identity, an unknown source table, or unexpected WorkOrders fields.
+.alter table schema_drift_quarantine policy update ```
+[
+    {
+        "IsEnabled": true,
+        "Source": "bronze_cdc_raw",
+        "Query": "bronze_cdc_raw\n| extend\n    source_table = tostring(payload.source.table),\n    record = iif(isnull(payload.after), payload.before, payload.after)\n| extend unexpected_fields = iif(\n    source_table == \"WorkOrders\",\n    set_difference(\n        bag_keys(record),\n        dynamic([\"WorkOrderId\", \"ProjectId\", \"EquipmentId\", \"Summary\", \"WorkOrderStatus\", \"ScheduledDate\", \"LastModifiedUtc\", \"PriorityCode\"])\n    ),\n    dynamic([])\n)\n| where\n    isempty(tenant_id)\n    or isempty(source_instance)\n    or source_table !in (\"Projects\", \"Equipment\", \"WorkOrders\", \"JobCosts\", \"Invoices\", \"DemoHeartbeat\")\n    or array_length(unexpected_fields) > 0\n| project\n    tenant_id,\n    source_instance,\n    source_table,\n    operation = tostring(payload.op),\n    event_utc = unixtime_milliseconds_todatetime(tolong(payload.ts_ms)),\n    processed_utc = EventProcessedUtcTime,\n    reason = case(\n        isempty(tenant_id) or isempty(source_instance), \"missing_identity\",\n        source_table !in (\"Projects\", \"Equipment\", \"WorkOrders\", \"JobCosts\", \"Invoices\", \"DemoHeartbeat\"), \"unknown_table\",\n        \"unexpected_fields\"\n    ),\n    unexpected_fields,\n    payload",
+        "IsTransactional": false,
+        "PropagateIngestionProperties": true
+    }
+]```
+
+.create-or-alter materialized-view gold_projects_latest on table silver_projects
+{
+    silver_projects
+    | summarize arg_max(processed_utc, *) by tenant_id, ProjectId
+}
+
+.create-or-alter materialized-view gold_equipment_latest on table silver_equipment
+{
+    silver_equipment
+    | summarize arg_max(processed_utc, *) by tenant_id, EquipmentId
+}
+
+.create-or-alter materialized-view gold_work_orders_latest on table silver_work_orders
+{
+    silver_work_orders
+    | summarize arg_max(processed_utc, *) by tenant_id, WorkOrderId
+}
+
+.create-or-alter materialized-view gold_job_costs_latest on table silver_job_costs
+{
+    silver_job_costs
+    | summarize arg_max(processed_utc, *) by tenant_id, JobCostId
+}
+
+.create-or-alter materialized-view gold_invoices_latest on table silver_invoices
+{
+    silver_invoices
+    | summarize arg_max(processed_utc, *) by tenant_id, InvoiceId
+}
+
+.create-or-alter materialized-view gold_heartbeat_latest on table silver_heartbeat
+{
+    silver_heartbeat
+    | summarize arg_max(processed_utc, *) by tenant_id, HeartbeatId
+}

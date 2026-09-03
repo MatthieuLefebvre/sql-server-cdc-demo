@@ -1,0 +1,27 @@
+let ExpectedMappings = datatable(source_instance:string, tenant_id:string)
+[
+    "sql-demo-north", "CONTOSO_NORTH",
+    "sql-demo-south", "CONTOSO_SOUTH"
+];
+let LandedRows = bronze_cdc_raw | extend landing_table="bronze_cdc_raw";
+let IdentitySummary = LandedRows
+    | summarize
+        row_count=count(),
+        identity_failures=countif(isempty(tenant_id) or isempty(source_instance)),
+        tenant_count=dcount(tenant_id),
+        tenants=make_set(tenant_id)
+      by landing_table, source_instance;
+let MappingConflicts = LandedRows
+    | summarize tenant_count=dcount(tenant_id), tenants=make_set(tenant_id) by source_instance
+    | where tenant_count != 1;
+let UnknownMappings = LandedRows
+    | summarize by source_instance, tenant_id
+    | join kind=leftanti ExpectedMappings on source_instance, tenant_id;
+union
+    (IdentitySummary
+        | project check="identity", subject=strcat(landing_table, "/", source_instance), failures=identity_failures, details=strcat("rows=", row_count, "; tenants=", tostring(tenants))),
+    (MappingConflicts
+        | project check="mapping_conflict", subject=source_instance, failures=tenant_count, details=strcat("tenants=", tostring(tenants))),
+    (UnknownMappings
+        | project check="unknown_mapping", subject=source_instance, failures=long(1), details=strcat("tenant=", tenant_id))
+| order by check asc, subject asc

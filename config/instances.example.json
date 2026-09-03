@@ -1,0 +1,86 @@
+{
+  "workspace": {
+    "id": "<fabric-workspace-id>",
+    "folderId": "<fabric-folder-id>"
+  },
+  "gateway": {
+    "id": "<streaming-vnet-gateway-id>",
+    "displayName": "<streaming-vnet-gateway-name>",
+    "subscriptionId": "<azure-subscription-id>",
+    "resourceGroupName": "<azure-resource-group>",
+    "virtualNetworkName": "<virtual-network-name>",
+    "subnetName": "<delegated-connector-subnet-name>"
+  },
+  "eventhouse": {
+    "databaseId": "<fabric-kql-database-id>",
+    "databaseName": "Fabric_CDC_Eventhouse",
+    "queryEndpoint": "https://<cluster>.kusto.fabric.microsoft.com"
+  },
+  "queryset": {
+    "id": "<fabric-kql-queryset-id>",
+    "displayName": "CDC_Isolation_Proof"
+  },
+  "streaming": {
+    "topology": "PerSourceIngressSharedBronze",
+    "rawTable": "bronze_cdc_raw",
+    "identityBoundary": "EventstreamBeforeLanding"
+  },
+  "processing": {
+    "definitionPath": "kql/medallion_processing.kql",
+    "silverTables": [
+      "silver_projects",
+      "silver_equipment",
+      "silver_work_orders",
+      "silver_job_costs",
+      "silver_invoices",
+      "silver_heartbeat"
+    ],
+    "goldViews": [
+      "gold_projects_latest",
+      "gold_equipment_latest",
+      "gold_work_orders_latest",
+      "gold_job_costs_latest",
+      "gold_invoices_latest",
+      "gold_heartbeat_latest"
+    ],
+    "quarantineTable": "schema_drift_quarantine"
+  },
+  "dashboard": {
+    "id": "<fabric-dashboard-id>",
+    "displayName": "ERP Live Operations"
+  },
+  "sourceTables": [
+    "dbo.Projects",
+    "dbo.Equipment",
+    "dbo.WorkOrders",
+    "dbo.JobCosts",
+    "dbo.Invoices",
+    "dbo.DemoHeartbeat"
+  ],
+  "instances": [
+    {
+      "name": "north",
+      "tenantId": "CONTOSO_NORTH",
+      "sourceInstance": "sql-demo-north",
+      "server": "<north-private-ip-or-hostname>",
+      "database": "VistaERP",
+      "connectionId": "<north-fabric-connection-id>",
+      "connectionName": "demo-north-vistaerp-cdc",
+      "eventstreamId": "<north-eventstream-id>",
+      "eventstreamName": "CDC_North_Raw",
+      "landingTable": "raw_north_cdc"
+    },
+    {
+      "name": "south",
+      "tenantId": "CONTOSO_SOUTH",
+      "sourceInstance": "sql-demo-south",
+      "server": "<south-private-ip-or-hostname>",
+      "database": "VistaERP",
+      "connectionId": "<south-fabric-connection-id>",
+      "connectionName": "demo-south-vistaerp-cdc",
+      "eventstreamId": "<south-eventstream-id>",
+      "eventstreamName": "CDC_South_Raw",
+      "landingTable": "raw_south_cdc"
+    }
+  ]
+}

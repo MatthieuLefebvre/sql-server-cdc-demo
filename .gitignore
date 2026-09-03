@@ -1,0 +1,37 @@
+# Local credentials and environment overrides
+.env
+.env.*
+!.env.example
+*.pem
+*.pfx
+*.key
+*secret*
+*credentials*
+
+# Runtime manifests contain environment-specific resource identifiers
+config/instances.json
+config/*-state.json
+config/*-runtime.json
+
+# Office and editor temporary files
+~$*.pptx
+~$*.docx
+/presenter-materials/
+*.tmp
+*.temp
+*.bak
+*.swp
+*.log
+.vscode/
+
+# Python build and cache output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# PowerShell and test output
+TestResults/
+coverage/
+out/
