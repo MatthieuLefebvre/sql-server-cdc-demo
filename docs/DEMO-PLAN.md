@@ -167,33 +167,31 @@ flowchart LR
     SVGW --> GW
 
     subgraph FAB[Fabric workspace / Demo / FabricRTI]
-        RN[Raw Eventstream North]
-        RS[Raw Eventstream South]
-        DN[DeltaFlow Eventstream North\n+ tenant constants]
-        DS[DeltaFlow Eventstream South\n+ tenant constants]
-        RAW[(Shared raw CDC landing)]
+        EN[North Eventstream\nstreaming SQL adds tenant + source]
+        ES[South Eventstream\nstreaming SQL adds tenant + source]
+        RAW[(Shared bronze_cdc_raw)]
         EH[Eventhouse + KQL database]
-        TAB[(Source-shaped corrected tables)]
-        KQL[KQL queryset + isolation proof\noptional real-time dashboard]
+        POL[Update policies]
+        SILVER[(Typed silver tables + quarantine)]
+        GOLD[Gold current-state views]
+        KQL[KQL queryset + isolation proof\nReal-Time Dashboard]
         OL[OneLake availability\nread-only Delta Lake]
     end
 
-    N --> RN
-    S --> RS
-    N --> DN
-    S --> DS
-    RN --> RAW
-    RS --> RAW
-    DN --> TAB
-    DS --> TAB
+    N --> EN
+    S --> ES
+    EN --> RAW
+    ES --> RAW
     RAW --> EH
-    TAB --> EH
-    EH --> KQL
+    EH --> POL
+    POL --> SILVER
+    SILVER --> GOLD
+    GOLD --> KQL
     EH --> OL
     OL --> DL[_delta_log + Parquet\nSQL endpoint / notebook / Direct Lake]
 ```
 
-The supported private SQL VM path is Streaming VNet data gateway injection into a `Microsoft.MessagingConnectors` delegated subnet with VNet reachability to the SQL VMs. Fabric Eventstream managed private endpoints are not used here because current documentation limits those endpoints to Azure Event Hubs and Azure IoT Hub.
+The deployed path uses two source-specific Eventstreams with streaming SQL identity projection and a fixed Eventhouse destination. DeltaFlow is not part of this architecture because its automatic table routing cannot coexist with the required pre-landing identity operator in the validated topology. The supported private SQL VM path is Streaming VNet data gateway injection into a `Microsoft.MessagingConnectors` delegated subnet with VNet reachability to the SQL VMs. Fabric Eventstream managed private endpoints are not used here because current documentation limits those endpoints to Azure Event Hubs and Azure IoT Hub.
 
 ## Component inventory
 
